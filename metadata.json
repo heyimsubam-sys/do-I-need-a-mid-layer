@@ -1,0 +1,6 @@
+{
+  "name": "Mid-Layer Protocol",
+  "description": "An AI-powered alpine gear assistant that scans weather data to give you the perfect layering and goggle strategy for the slopes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["AI Weather Analysis", "Interactive 5-Day Forecast", "Dynamic Atmospheric Backgrounds"]
+}
