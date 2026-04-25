@@ -32,10 +32,13 @@ export default function App() {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   const [aiVerdict, setAiVerdict] = useState<string | null>(null);
+  const [isAiVerdictLoading, setIsAiVerdictLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const searchRef = useRef<HTMLDivElement>(null);
+  const aiVerdictRequestIdRef = useRef(0);
+  const aiVerdictLoadingGateRef = useRef(false);
 
   // Ultra-fast search suggestions
   useEffect(() => {
@@ -85,10 +88,24 @@ export default function App() {
       setSelectedDayIndex(0);
       setIsLoading(false); // Stop main loading as soon as weather data is ready
 
-      // Fetch AI verdict in background
+      aiVerdictLoadingGateRef.current = true;
+      setIsAiVerdictLoading(true);
+      const aiId = ++aiVerdictRequestIdRef.current;
       fetchAIVerdict(data.current, data.resortName)
-        .then(verdict => setAiVerdict(verdict))
-        .catch(() => setAiVerdict("Protocol scan complete. Proceed with caution."));
+        .then((verdict) => {
+          if (aiId === aiVerdictRequestIdRef.current) setAiVerdict(verdict);
+        })
+        .catch(() => {
+          if (aiId === aiVerdictRequestIdRef.current) {
+            setAiVerdict("Protocol scan complete. Proceed with caution.");
+          }
+        })
+        .finally(() => {
+          if (aiId === aiVerdictRequestIdRef.current) {
+            aiVerdictLoadingGateRef.current = false;
+            setIsAiVerdictLoading(false);
+          }
+        });
     } catch (err) {
       setError("System failure: Could not link to alpine orbital sensors.");
       setIsLoading(false);
@@ -97,11 +114,25 @@ export default function App() {
 
   const handleDaySelect = async (index: number) => {
     if (!weather) return;
+    if (index === selectedDayIndex && aiVerdict !== null) return;
+    if (aiVerdictLoadingGateRef.current) return;
+
+    aiVerdictLoadingGateRef.current = true;
+    setIsAiVerdictLoading(true);
+    const aiId = ++aiVerdictRequestIdRef.current;
     setSelectedDayIndex(index);
     setAiVerdict(null);
-    const day = weather.forecast[index];
-    const verdict = await fetchAIVerdict(day, weather.resortName);
-    setAiVerdict(verdict);
+
+    try {
+      const day = weather.forecast[index];
+      const verdict = await fetchAIVerdict(day, weather.resortName);
+      if (aiId === aiVerdictRequestIdRef.current) setAiVerdict(verdict);
+    } finally {
+      if (aiId === aiVerdictRequestIdRef.current) {
+        aiVerdictLoadingGateRef.current = false;
+        setIsAiVerdictLoading(false);
+      }
+    }
   };
 
   const activeWeather = weather?.forecast[selectedDayIndex];
@@ -263,7 +294,12 @@ export default function App() {
               {/* Results Top Header */}
               <div className="flex justify-between items-center w-full max-w-md mx-auto mb-8">
                 <button 
-                  onClick={() => setWeather(null)}
+                  onClick={() => {
+                    aiVerdictRequestIdRef.current += 1;
+                    aiVerdictLoadingGateRef.current = false;
+                    setIsAiVerdictLoading(false);
+                    setWeather(null);
+                  }}
                   className="p-2 bg-slate-900 rounded-full border border-slate-800"
                 >
                    <MapPin className="w-4 h-4 text-neon-cyan" />
@@ -352,12 +388,15 @@ export default function App() {
                     return (
                       <button
                         key={day.date}
+                        type="button"
+                        disabled={isAiVerdictLoading}
                         onClick={() => handleDaySelect(idx)}
                         className={cn(
                           "flex-shrink-0 w-20 flex flex-col items-center p-3 rounded-2xl border transition-all duration-300",
                           isSelected 
                             ? "bg-neon-cyan/10 border-neon-cyan ring-2 ring-neon-cyan/20" 
-                            : "bg-white/5 border-white/5 hover:bg-white/10"
+                            : "bg-white/5 border-white/5 hover:bg-white/10",
+                          isAiVerdictLoading && "opacity-40 cursor-not-allowed hover:bg-white/5"
                         )}
                       >
                         <span className={cn("text-[9px] font-black uppercase tracking-wider mb-2", isSelected ? "text-neon-cyan" : "text-white/40")}>{dayName}</span>
